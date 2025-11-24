@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { 
   Bird, 
@@ -10,12 +11,14 @@ import {
   ArrowRight, 
   Info, 
   Leaf,
-  Activity
+  Activity,
+  Globe
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import ConceptMap from './components/ConceptMap';
 import ImageEditor from './components/ImageEditor';
 import { Section } from './types';
+import { LanguageProvider, useLanguage } from './contexts/LanguageContext';
 
 // --- Data for Charts ---
 const biodiversityData = [
@@ -32,17 +35,22 @@ const waterQualityData = [
   { name: 'Outflow', value: 15 },
 ];
 
-const App: React.FC = () => {
+const AppContent: React.FC = () => {
   const [activeSection, setActiveSection] = useState<Section>(Section.OVERVIEW);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const { language, setLanguage, t } = useLanguage();
 
   const navItems = [
-    { id: Section.OVERVIEW, label: 'Overview', icon: Info },
-    { id: Section.PRODUCTION, label: '1: Eco-Production', icon: Factory },
-    { id: Section.FUNCTION, label: '3: Eco-Functions', icon: Bird },
-    { id: Section.SHORELINE, label: 'L: Shoreline', icon: Waves },
-    { id: Section.AI_LAB, label: 'AI Vision Lab', icon: ShieldCheck },
+    { id: Section.OVERVIEW, label: t.nav.overview, icon: Info },
+    { id: Section.PRODUCTION, label: t.nav.production, icon: Factory },
+    { id: Section.FUNCTION, label: t.nav.function, icon: Bird },
+    { id: Section.SHORELINE, label: t.nav.shoreline, icon: Waves },
+    { id: Section.AI_LAB, label: t.nav.ai_lab, icon: ShieldCheck },
   ];
+
+  const toggleLanguage = () => {
+    setLanguage(language === 'en' ? 'zh' : 'en');
+  };
 
   const renderContent = () => {
     switch (activeSection) {
@@ -50,18 +58,16 @@ const App: React.FC = () => {
         return (
           <div className="space-y-8 animate-fade-in">
             <div className="bg-gradient-to-r from-blue-600 to-teal-500 rounded-2xl p-8 md:p-12 text-white shadow-xl">
-              <h1 className="text-3xl md:text-5xl font-bold mb-4">Yellow River Delta <br/>Ecological Restoration</h1>
+              <h1 className="text-3xl md:text-5xl font-bold mb-4">{t.title}</h1>
               <p className="text-blue-50 text-lg md:text-xl max-w-2xl leading-relaxed">
-                Solving the "People Retreat, Birds Advance" conflict through the innovative 
-                <span className="font-bold text-yellow-300 mx-2">"1+3+L"</span> 
-                model. A Nature-based Solution (NbS) for global coastal wetland management.
+                {t.subtitle}
               </p>
               <div className="mt-8 flex gap-4">
                 <button 
                   onClick={() => setActiveSection(Section.PRODUCTION)}
                   className="bg-white text-blue-600 px-6 py-3 rounded-full font-semibold hover:bg-blue-50 transition-colors flex items-center gap-2"
                 >
-                  Explore Model <ArrowRight size={20}/>
+                  {t.overview.explore_btn} <ArrowRight size={20}/>
                 </button>
               </div>
             </div>
@@ -71,35 +77,33 @@ const App: React.FC = () => {
                 <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mb-4">
                   <Droplets className="text-blue-600" />
                 </div>
-                <h3 className="font-bold text-lg mb-2">The Conflict</h3>
+                <h3 className="font-bold text-lg mb-2">{t.overview.conflict_title}</h3>
                 <p className="text-slate-600 text-sm leading-relaxed">
-                  Massive loss of coastal wetlands due to salt pans and aquaculture. Simple abandonment leads to high salinity and habitat degradation.
+                  {t.overview.conflict_desc}
                 </p>
               </div>
               <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
                 <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mb-4">
                   <Leaf className="text-green-600" />
                 </div>
-                <h3 className="font-bold text-lg mb-2">The Solution (1+3+L)</h3>
+                <h3 className="font-bold text-lg mb-2">{t.overview.solution_title}</h3>
                 <p className="text-slate-600 text-sm leading-relaxed">
-                  <span className="font-semibold text-slate-900">1</span> Eco-Production Set + 
-                  <span className="font-semibold text-slate-900"> 3</span> Functional Uplifts + 
-                  <span className="font-semibold text-slate-900"> L</span>-shaped Eco-Shoreline.
+                  {t.overview.solution_desc}
                 </p>
               </div>
               <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
                 <div className="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center mb-4">
                   <Activity className="text-yellow-600" />
                 </div>
-                <h3 className="font-bold text-lg mb-2">The Goal</h3>
+                <h3 className="font-bold text-lg mb-2">{t.overview.goal_title}</h3>
                 <p className="text-slate-600 text-sm leading-relaxed">
-                  Transform from a passive "no-human zone" to an active "Bird-Friendly" ecosystem that balances biodiversity and sustainable use.
+                  {t.overview.goal_desc}
                 </p>
               </div>
             </div>
 
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-              <h2 className="text-xl font-bold mb-6 text-slate-800">Interactive Zoning Map</h2>
+              <h2 className="text-xl font-bold mb-6 text-slate-800">{t.overview.map_title}</h2>
               <ConceptMap 
                 onSelectZone={(zoneId) => {
                   if (zoneId === 'production') setActiveSection(Section.PRODUCTION);
@@ -117,10 +121,10 @@ const App: React.FC = () => {
             <div className="bg-blue-50 p-8 rounded-2xl border border-blue-100">
               <div className="flex items-center gap-4 mb-4">
                 <Factory className="w-10 h-10 text-blue-600" />
-                <h2 className="text-2xl font-bold text-slate-800">1: Eco-Production Mode</h2>
+                <h2 className="text-2xl font-bold text-slate-800">{t.production.title}</h2>
               </div>
               <p className="text-slate-700 text-lg">
-                Transforming aquaculture ponds and salt pans into bird-friendly habitats without completely stopping production.
+                {t.production.desc}
               </p>
             </div>
 
@@ -128,35 +132,35 @@ const App: React.FC = () => {
               <div className="bg-white p-6 rounded-xl shadow-md">
                 <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
                   <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
-                  Key Strategies
+                  {t.production.strategies}
                 </h3>
                 <ul className="space-y-4">
                   <li className="flex gap-3">
                     <div className="mt-1 text-blue-500 font-bold">01</div>
                     <div>
-                      <h4 className="font-medium text-slate-900">Micro-topography Modification</h4>
-                      <p className="text-sm text-slate-500">Creating islands and varied depths within ponds for different bird species.</p>
+                      <h4 className="font-medium text-slate-900">{t.production.s1_title}</h4>
+                      <p className="text-sm text-slate-500">{t.production.s1_desc}</p>
                     </div>
                   </li>
                   <li className="flex gap-3">
                     <div className="mt-1 text-blue-500 font-bold">02</div>
                     <div>
-                      <h4 className="font-medium text-slate-900">Water Level Regulation</h4>
-                      <p className="text-sm text-slate-500">Seasonal adjustments: Lower levels for wading birds during migration, deeper for swimming birds.</p>
+                      <h4 className="font-medium text-slate-900">{t.production.s2_title}</h4>
+                      <p className="text-sm text-slate-500">{t.production.s2_desc}</p>
                     </div>
                   </li>
                   <li className="flex gap-3">
                     <div className="mt-1 text-blue-500 font-bold">03</div>
                     <div>
-                      <h4 className="font-medium text-slate-900">Salinity Gradient</h4>
-                      <p className="text-sm text-slate-500">Managing salt concentrations to support diverse brine shrimp and microorganisms (bird food).</p>
+                      <h4 className="font-medium text-slate-900">{t.production.s3_title}</h4>
+                      <p className="text-sm text-slate-500">{t.production.s3_desc}</p>
                     </div>
                   </li>
                 </ul>
               </div>
 
               <div className="bg-white p-6 rounded-xl shadow-md">
-                <h3 className="font-bold text-lg mb-4">Ecological Recovery Projection</h3>
+                <h3 className="font-bold text-lg mb-4">{t.production.chart_title}</h3>
                 <div className="h-64 w-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={biodiversityData}>
@@ -187,18 +191,18 @@ const App: React.FC = () => {
             <div className="bg-emerald-50 p-8 rounded-2xl border border-emerald-100">
               <div className="flex items-center gap-4 mb-4">
                 <Bird className="w-10 h-10 text-emerald-600" />
-                <h2 className="text-2xl font-bold text-slate-800">3: Ecological Function Uplift</h2>
+                <h2 className="text-2xl font-bold text-slate-800">{t.function.title}</h2>
               </div>
               <p className="text-slate-700 text-lg">
-                Establishing three critical functional zones: High-tide Roosts, Foraging Areas, and Purification Wetlands.
+                {t.function.desc}
               </p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="bg-white p-6 rounded-xl shadow-md border-t-4 border-t-emerald-500">
-                <h3 className="font-bold text-lg mb-2">High-tide Roosts</h3>
+                <h3 className="font-bold text-lg mb-2">{t.function.roost_title}</h3>
                 <p className="text-sm text-slate-600 mb-4">
-                  Safe resting islands that remain above water during high tides when mudflats are submerged.
+                  {t.function.roost_desc}
                 </p>
                 <div className="h-32 bg-emerald-100 rounded-lg flex items-center justify-center overflow-hidden relative">
                    {/* Abstract visualization of roost */}
@@ -208,9 +212,9 @@ const App: React.FC = () => {
               </div>
 
               <div className="bg-white p-6 rounded-xl shadow-md border-t-4 border-t-amber-500">
-                <h3 className="font-bold text-lg mb-2">Foraging Zones</h3>
+                <h3 className="font-bold text-lg mb-2">{t.function.foraging_title}</h3>
                 <p className="text-sm text-slate-600 mb-4">
-                  Managed areas with optimized benthos populations to supplement food for migratory birds.
+                  {t.function.foraging_desc}
                 </p>
                 <div className="h-32 bg-amber-50 rounded-lg flex items-center justify-center">
                    <div className="grid grid-cols-4 gap-2 p-4">
@@ -222,9 +226,9 @@ const App: React.FC = () => {
               </div>
 
               <div className="bg-white p-6 rounded-xl shadow-md border-t-4 border-t-blue-500">
-                <h3 className="font-bold text-lg mb-2">Purification Wetlands</h3>
+                <h3 className="font-bold text-lg mb-2">{t.function.wetland_title}</h3>
                 <p className="text-sm text-slate-600 mb-4">
-                  Using wetland plants to filter tail water from aquaculture before it enters the sea.
+                  {t.function.wetland_desc}
                 </p>
                 <div className="h-32 w-full">
                   <ResponsiveContainer width="100%" height="100%">
@@ -246,22 +250,22 @@ const App: React.FC = () => {
             <div className="bg-slate-100 p-8 rounded-2xl border border-slate-200">
               <div className="flex items-center gap-4 mb-4">
                 <Waves className="w-10 h-10 text-slate-600" />
-                <h2 className="text-2xl font-bold text-slate-800">L: Ecological Shoreline</h2>
+                <h2 className="text-2xl font-bold text-slate-800">{t.shoreline.title}</h2>
               </div>
               <p className="text-slate-700 text-lg">
-                Implementing a "Living Shoreline" concept. Moving away from hard concrete seawalls to resilient, bio-diverse barriers.
+                {t.shoreline.desc}
               </p>
             </div>
 
             <div className="bg-white rounded-xl shadow-md overflow-hidden flex flex-col md:flex-row">
               <div className="p-8 md:w-1/2 flex flex-col justify-center">
-                <h3 className="text-2xl font-bold mb-4 text-slate-800">Double-Dike System</h3>
+                <h3 className="text-2xl font-bold mb-4 text-slate-800">{t.shoreline.dike_title}</h3>
                 <p className="text-slate-600 mb-6 leading-relaxed">
-                  A tiered defense system. The outer dike dissipates wave energy through salt marshes and mangroves, while the inner dike provides final flood protection. This space between dikes becomes a rich habitat.
+                  {t.shoreline.dike_desc}
                 </p>
                 <div className="flex gap-4">
-                  <div className="px-4 py-2 bg-green-100 text-green-700 rounded-lg text-sm font-bold">Storm Protection</div>
-                  <div className="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg text-sm font-bold">Carbon Sequestration</div>
+                  <div className="px-4 py-2 bg-green-100 text-green-700 rounded-lg text-sm font-bold">{t.shoreline.tag_storm}</div>
+                  <div className="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg text-sm font-bold">{t.shoreline.tag_carbon}</div>
                 </div>
               </div>
               <div className="md:w-1/2 bg-gradient-to-b from-sky-100 to-blue-200 min-h-[300px] relative">
@@ -274,7 +278,7 @@ const App: React.FC = () => {
                    </svg>
                 </div>
                 <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 text-slate-500 font-bold text-lg">
-                  Cross-section Visualization
+                  {t.shoreline.visual_title}
                 </div>
               </div>
             </div>
@@ -321,7 +325,14 @@ const App: React.FC = () => {
           ))}
         </nav>
 
-        <div className="absolute bottom-0 w-full p-6 border-t border-slate-100 bg-slate-50/50">
+        <div className="absolute bottom-0 w-full p-4 border-t border-slate-100 bg-slate-50/50">
+          <button 
+            onClick={toggleLanguage}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-slate-50 transition-colors mb-3"
+          >
+            <Globe size={16} />
+            {language === 'en' ? '中文' : 'English'}
+          </button>
           <p className="text-xs text-slate-400 text-center">
             © 2024 Eco-Project<br/>Based on "1+3+L" Model
           </p>
@@ -334,9 +345,17 @@ const App: React.FC = () => {
           <Leaf className="text-green-500 w-5 h-5" />
           EcoRestore
         </div>
-        <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="p-2 text-slate-600">
-          {isMenuOpen ? <X size={24} /> : <Menu size={24} />}
-        </button>
+        <div className="flex gap-2">
+          <button 
+            onClick={toggleLanguage}
+            className="p-2 text-slate-600 border border-slate-200 rounded-md"
+          >
+            <Globe size={20} />
+          </button>
+          <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="p-2 text-slate-600">
+            {isMenuOpen ? <X size={24} /> : <Menu size={24} />}
+          </button>
+        </div>
       </div>
 
       {/* Main Content Area */}
@@ -348,5 +367,13 @@ const App: React.FC = () => {
     </div>
   );
 };
+
+const App: React.FC = () => {
+  return (
+    <LanguageProvider>
+      <AppContent />
+    </LanguageProvider>
+  );
+}
 
 export default App;

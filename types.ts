@@ -1,3 +1,4 @@
+
 export enum Section {
   OVERVIEW = 'OVERVIEW',
   PRODUCTION = 'PRODUCTION', // 1
@@ -19,3 +20,5 @@ export interface ZoneInfo {
   color: string;
   icon: string;
 }
+
+export type Language = 'en' | 'zh';

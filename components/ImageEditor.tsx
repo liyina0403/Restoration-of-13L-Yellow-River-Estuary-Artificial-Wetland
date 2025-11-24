@@ -1,8 +1,9 @@
 
-import React, { useState, useRef, useMemo } from 'react';
-import { Loader2, Upload, Wand2, Image as ImageIcon, Droplets, Leaf, Waves, RefreshCcw, ArrowDown, BarChart as BarChartIcon, FlaskConical, Timer, Maximize2, Download, History } from 'lucide-react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
+import { Loader2, Upload, Wand2, Image as ImageIcon, Droplets, Leaf, Waves, RefreshCcw, ArrowDown, BarChart as BarChartIcon, FlaskConical, Timer, Maximize2, Download, History, MoveHorizontal } from 'lucide-react';
 import { editImageWithGemini } from '../services/geminiService';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface HistoryItem {
   id: string;
@@ -12,6 +13,8 @@ interface HistoryItem {
 }
 
 const ImageEditor: React.FC = () => {
+  const { t, language } = useLanguage();
+  
   // AI Image State
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [mimeType, setMimeType] = useState<string>('');
@@ -23,6 +26,11 @@ const ImageEditor: React.FC = () => {
   const [showHistory, setShowHistory] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Comparison Slider State
+  const [sliderPosition, setSliderPosition] = useState(50);
+  const [isResizing, setIsResizing] = useState(false);
+  const imageContainerRef = useRef<HTMLDivElement>(null);
+
   // Tabs State
   const [activeTab, setActiveTab] = useState<'habitat' | 'wetland'>('habitat');
 
@@ -32,17 +40,12 @@ const ImageEditor: React.FC = () => {
   const [vegetation, setVegetation] = useState(40); // %
 
   // --- Wetland Simulation State (Purification) ---
-  // Based on Design Parameters:
-  // HRT: 2.0 ~ 12.0 d
-  // Surface Load: 0.02 ~ 0.2 m3/(m2.d)
-  // Area: <= 3000 m2
   const [hrt, setHrt] = useState(5.0); // days
   const [hydraulicLoad, setHydraulicLoad] = useState(0.1); // m3/(m2.d)
   const [wetlandArea, setWetlandArea] = useState(1500); // m2
 
   // --- Habitat Logic ---
   const habitatData = useMemo(() => {
-    // Heuristics for "1+3+L" model
     const wadingScore = Math.max(10, 100 - Math.abs(waterLevel - 15) * 2.5 - Math.abs(salinity - 20) * 0.5);
     const swimmingScore = Math.max(10, 100 - Math.abs(waterLevel - 80) * 1.5);
     
@@ -57,31 +60,21 @@ const ImageEditor: React.FC = () => {
     const swimmingAdjusted = swimmingScore * (0.8 + vegetation / 150);
 
     return [
-      { name: 'Wading Birds', value: Math.round(wadingAdjusted), color: '#818cf8' },
-      { name: 'Swimming Birds', value: Math.round(swimmingAdjusted), color: '#3b82f6' },
-      { name: 'Benthic Biomass', value: Math.round(benthosScore), color: '#fbbf24' },
+      { name: t.ai_lab.wading, value: Math.round(wadingAdjusted), color: '#818cf8' },
+      { name: t.ai_lab.swimming, value: Math.round(swimmingAdjusted), color: '#3b82f6' },
+      { name: t.ai_lab.benthos, value: Math.round(benthosScore), color: '#fbbf24' },
     ];
-  }, [waterLevel, salinity, vegetation]);
+  }, [waterLevel, salinity, vegetation, t]);
 
   // --- Wetland Logic ---
   const wetlandData = useMemo(() => {
-    // Calculate efficiency factors (0 to 1)
-    // Longer retention time (closer to 12) -> Better efficiency
     const timeEfficiency = (hrt - 2) / (12 - 2); 
-    // Lower hydraulic load (closer to 0.02) -> Better efficiency
     const loadEfficiency = 1 - ((hydraulicLoad - 0.02) / (0.2 - 0.02));
-    
-    // Combined Efficiency Score (weighted)
     const efficiencyScore = (timeEfficiency * 0.6 + loadEfficiency * 0.4);
 
-    // Calculate Reduction Loads (g/m2.d) based on provided ranges
-    // COD: 0.5 ~ 5.0
     const codRemoval = 0.5 + (5.0 - 0.5) * efficiencyScore;
-    // Ammonia Nitrogen (NH3-N): 0.02 ~ 0.3
     const nh3Removal = 0.02 + (0.3 - 0.02) * efficiencyScore;
-    // Total Nitrogen (TN): 0.05 ~ 0.5
     const tnRemoval = 0.05 + (0.5 - 0.05) * efficiencyScore;
-    // Total Phosphorus (TP): 0.008 ~ 0.05
     const tpRemoval = 0.008 + (0.05 - 0.008) * efficiencyScore;
 
     return [
@@ -93,35 +86,56 @@ const ImageEditor: React.FC = () => {
   }, [hrt, hydraulicLoad]);
 
   const applySimulationToPrompt = () => {
-    let desc = "Modify the image to show ";
+    let desc = "";
     
-    if (activeTab === 'habitat') {
-      if (waterLevel < 20) desc += "exposed mudflats with very shallow water puddles, ";
-      else if (waterLevel < 60) desc += "a wetland with moderate water depth suitable for wading, ";
-      else desc += "a deep water lake environment, ";
+    if (language === 'zh') {
+      desc = "修改图片以展示";
+      if (activeTab === 'habitat') {
+        if (waterLevel < 20) desc += "暴露的滩涂和非常浅的水坑，";
+        else if (waterLevel < 60) desc += "适合涉禽的中等深度湿地，";
+        else desc += "深水湖泊环境，";
 
-      if (vegetation < 20) desc += "barren soil with almost no plants, ";
-      else if (vegetation < 60) desc += "scattered patches of reeds and saltmarsh plants, ";
-      else desc += "dense, lush wetland vegetation and reed beds, ";
+        if (vegetation < 20) desc += "几乎没有植物的裸露土壤，";
+        else if (vegetation < 60) desc += "零星分布的芦苇和盐沼植物，";
+        else desc += "茂密的湿地植被和芦苇丛，";
 
-      if (salinity > 60) desc += "with crystalline salt edges indicating high salinity.";
-      else desc += "representing a healthy brackish ecosystem.";
+        if (salinity > 60) desc += "边缘带有结晶盐，显示高盐度。";
+        else desc += "代表健康的咸淡水生态系统。";
+      } else {
+        desc += "一个表面流人工湿地。";
+        if (hydraulicLoad > 0.15) desc += "展示非常茂密的芦苇和香蒲以处理高水流量。";
+        else desc += "展示平衡的湿地植物斑块和开阔水路。";
+
+        if (hrt > 8) desc += "水体应显得清澈平静（高停留时间）。";
+        else if (hrt < 4) desc += "水体应略显浑浊，有明显流动。";
+        else desc += "水体看起来清洁，有自然波纹。";
+
+        desc += `场景是一个 ${wetlandArea} 平方米的处理区，有混凝土或土堤分隔。`;
+      }
     } else {
-      // Wetland Prompt Logic
-      desc += "a Surface Flow Constructed Wetland. ";
-      
-      // Vegetation based on Area/Load (Simulated visual density)
-      // High load needs more plants visually to imply treatment
-      if (hydraulicLoad > 0.15) desc += "Show extremely dense, lush reed beds and cattails processing high water flow. ";
-      else desc += "Show balanced patches of wetland plants and open water channels. ";
+      desc = "Modify the image to show ";
+      if (activeTab === 'habitat') {
+        if (waterLevel < 20) desc += "exposed mudflats with very shallow water puddles, ";
+        else if (waterLevel < 60) desc += "a wetland with moderate water depth suitable for wading, ";
+        else desc += "a deep water lake environment, ";
 
-      // Water Quality Visual
-      // High HRT = Clearer water
-      if (hrt > 8) desc += "The water should appear crystal clear and calm (high retention time). ";
-      else if (hrt < 4) desc += "The water should appear slightly turbid with visible flow currents. ";
-      else desc += "The water should look clean with natural ripples. ";
+        if (vegetation < 20) desc += "barren soil with almost no plants, ";
+        else if (vegetation < 60) desc += "scattered patches of reeds and saltmarsh plants, ";
+        else desc += "dense, lush wetland vegetation and reed beds, ";
 
-      desc += `The scene is a wide angle view of a ${wetlandArea} square meter treatment zone with concrete or earth berm dividers.`;
+        if (salinity > 60) desc += "with crystalline salt edges indicating high salinity.";
+        else desc += "representing a healthy brackish ecosystem.";
+      } else {
+        desc += "a Surface Flow Constructed Wetland. ";
+        if (hydraulicLoad > 0.15) desc += "Show extremely dense, lush reed beds and cattails processing high water flow. ";
+        else desc += "Show balanced patches of wetland plants and open water channels. ";
+
+        if (hrt > 8) desc += "The water should appear crystal clear and calm (high retention time). ";
+        else if (hrt < 4) desc += "The water should appear slightly turbid with visible flow currents. ";
+        else desc += "The water should look clean with natural ripples. ";
+
+        desc += `The scene is a wide angle view of a ${wetlandArea} square meter treatment zone with concrete or earth berm dividers.`;
+      }
     }
 
     setPrompt(desc);
@@ -152,20 +166,20 @@ const ImageEditor: React.FC = () => {
       const result = await editImageWithGemini(selectedImage, mimeType, prompt);
       if (result) {
         setResultImage(result);
+        setSliderPosition(50); // Reset slider to center
         
-        // Add to history
         const newItem: HistoryItem = {
           id: Date.now().toString(),
           imageUrl: result,
           prompt: prompt,
           timestamp: Date.now()
         };
-        setHistory(prev => [newItem, ...prev].slice(0, 10)); // Keep last 10
+        setHistory(prev => [newItem, ...prev].slice(0, 10));
       } else {
-        setError("Failed to generate image. Please try again.");
+        setError(t.ai_lab.error_gen);
       }
     } catch (err) {
-      setError("An error occurred while communicating with the AI.");
+      setError(t.ai_lab.error_ai);
       console.error(err);
     } finally {
       setLoading(false);
@@ -186,7 +200,37 @@ const ImageEditor: React.FC = () => {
     setResultImage(item.imageUrl);
     setPrompt(item.prompt);
     setShowHistory(false);
+    setSliderPosition(50);
   };
+
+  // Slider Mouse/Touch Handling
+  const handleMouseDown = () => setIsResizing(true);
+  const handleMouseUp = () => setIsResizing(false);
+  const handleMouseMove = (e: MouseEvent | TouchEvent) => {
+    if (!isResizing || !imageContainerRef.current) return;
+    
+    const rect = imageContainerRef.current.getBoundingClientRect();
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const x = Math.max(0, Math.min(clientX - rect.left, rect.width));
+    const percentage = (x / rect.width) * 100;
+    
+    setSliderPosition(percentage);
+  };
+
+  useEffect(() => {
+    if (isResizing) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+      window.addEventListener('touchmove', handleMouseMove);
+      window.addEventListener('touchend', handleMouseUp);
+    }
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('touchmove', handleMouseMove);
+      window.removeEventListener('touchend', handleMouseUp);
+    };
+  }, [isResizing]);
 
   return (
     <div className="space-y-6 relative">
@@ -204,7 +248,7 @@ const ImageEditor: React.FC = () => {
             }`}
           >
             <BarChartIcon size={18} />
-            Bird Habitat Simulation
+            {t.ai_lab.title_habitat}
           </button>
           <button
             onClick={() => setActiveTab('wetland')}
@@ -215,20 +259,18 @@ const ImageEditor: React.FC = () => {
             }`}
           >
             <FlaskConical size={18} />
-            Water Purification Wetland
+            {t.ai_lab.title_wetland}
           </button>
         </div>
 
         <div className="p-6">
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
             <div>
               <h2 className="text-xl font-bold text-slate-900">
-                {activeTab === 'habitat' ? 'Habitat Parameters' : 'Surface Flow Wetland Design'}
+                {activeTab === 'habitat' ? t.ai_lab.title_habitat : t.ai_lab.title_wetland}
               </h2>
               <p className="text-slate-500 text-sm">
-                {activeTab === 'habitat' 
-                  ? 'Adjust environmental variables to predict biodiversity support.' 
-                  : 'Configure engineering parameters to simulate pollutant reduction.'}
+                {activeTab === 'habitat' ? t.ai_lab.subtitle_habitat : t.ai_lab.subtitle_wetland}
               </p>
             </div>
             <button 
@@ -240,7 +282,7 @@ const ImageEditor: React.FC = () => {
               }`}
             >
               <RefreshCcw size={16} />
-              Apply to AI Vision
+              {t.ai_lab.apply_btn}
             </button>
           </div>
 
@@ -253,7 +295,7 @@ const ImageEditor: React.FC = () => {
                   <div className="space-y-3">
                     <div className="flex justify-between items-center">
                       <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
-                        <Waves className="w-4 h-4 text-blue-500" /> Water Level
+                        <Waves className="w-4 h-4 text-blue-500" /> {t.ai_lab.ctrl_water}
                       </label>
                       <span className="text-xs font-mono bg-slate-100 px-2 py-1 rounded">{waterLevel} cm</span>
                     </div>
@@ -267,7 +309,7 @@ const ImageEditor: React.FC = () => {
                   <div className="space-y-3">
                     <div className="flex justify-between items-center">
                       <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
-                        <Droplets className="w-4 h-4 text-amber-500" /> Salinity
+                        <Droplets className="w-4 h-4 text-amber-500" /> {t.ai_lab.ctrl_salinity}
                       </label>
                       <span className="text-xs font-mono bg-slate-100 px-2 py-1 rounded">{salinity} ppt</span>
                     </div>
@@ -281,7 +323,7 @@ const ImageEditor: React.FC = () => {
                   <div className="space-y-3">
                     <div className="flex justify-between items-center">
                       <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
-                        <Leaf className="w-4 h-4 text-green-500" /> Vegetation Cover
+                        <Leaf className="w-4 h-4 text-green-500" /> {t.ai_lab.ctrl_veg}
                       </label>
                       <span className="text-xs font-mono bg-slate-100 px-2 py-1 rounded">{vegetation} %</span>
                     </div>
@@ -298,7 +340,7 @@ const ImageEditor: React.FC = () => {
                   <div className="space-y-3">
                     <div className="flex justify-between items-center">
                       <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
-                        <Timer className="w-4 h-4 text-teal-500" /> HRT (Retention Time)
+                        <Timer className="w-4 h-4 text-teal-500" /> {t.ai_lab.ctrl_hrt}
                       </label>
                       <span className="text-xs font-mono bg-slate-100 px-2 py-1 rounded">{hrt} d</span>
                     </div>
@@ -309,7 +351,7 @@ const ImageEditor: React.FC = () => {
                     />
                     <div className="flex justify-between text-[10px] text-slate-400">
                       <span>2.0 d</span>
-                      <span>Range: 2.0 ~ 12.0</span>
+                      <span>{t.ai_lab.range}: 2.0 ~ 12.0</span>
                       <span>12.0 d</span>
                     </div>
                   </div>
@@ -317,7 +359,7 @@ const ImageEditor: React.FC = () => {
                   <div className="space-y-3">
                     <div className="flex justify-between items-center">
                       <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
-                        <Waves className="w-4 h-4 text-blue-500" /> Surface Hydraulic Load
+                        <Waves className="w-4 h-4 text-blue-500" /> {t.ai_lab.ctrl_load}
                       </label>
                       <span className="text-xs font-mono bg-slate-100 px-2 py-1 rounded">{hydraulicLoad}</span>
                     </div>
@@ -336,7 +378,7 @@ const ImageEditor: React.FC = () => {
                   <div className="space-y-3">
                     <div className="flex justify-between items-center">
                       <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
-                        <Maximize2 className="w-4 h-4 text-purple-500" /> Wetland Area
+                        <Maximize2 className="w-4 h-4 text-purple-500" /> {t.ai_lab.ctrl_area}
                       </label>
                       <span className="text-xs font-mono bg-slate-100 px-2 py-1 rounded">{wetlandArea} m²</span>
                     </div>
@@ -345,7 +387,7 @@ const ImageEditor: React.FC = () => {
                       onChange={(e) => setWetlandArea(Number(e.target.value))}
                       className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-purple-500"
                     />
-                    <p className="text-xs text-slate-400 text-right">Max Limit: 3000 m²</p>
+                    <p className="text-xs text-slate-400 text-right">{t.ai_lab.max_limit}: 3000 m²</p>
                   </div>
                 </>
               )}
@@ -355,7 +397,7 @@ const ImageEditor: React.FC = () => {
             <div className="lg:col-span-2 h-72 bg-slate-50 rounded-xl border border-slate-100 p-4">
               {activeTab === 'habitat' ? (
                 <>
-                  <h4 className="text-sm font-semibold text-slate-600 mb-4 text-center">Habitat Suitability Index</h4>
+                  <h4 className="text-sm font-semibold text-slate-600 mb-4 text-center">{t.ai_lab.chart_habitat}</h4>
                   <ResponsiveContainer width="100%" height="85%">
                     <BarChart data={habitatData} layout="vertical" margin={{ top: 5, right: 30, left: 40, bottom: 5 }}>
                       <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
@@ -372,7 +414,7 @@ const ImageEditor: React.FC = () => {
                 </>
               ) : (
                 <>
-                  <h4 className="text-sm font-semibold text-slate-600 mb-4 text-center">Pollutant Reduction Load (g/m²·d)</h4>
+                  <h4 className="text-sm font-semibold text-slate-600 mb-4 text-center">{t.ai_lab.chart_pollutant}</h4>
                   <ResponsiveContainer width="100%" height="85%">
                     <BarChart data={wetlandData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
@@ -419,7 +461,7 @@ const ImageEditor: React.FC = () => {
           <button 
             onClick={() => setShowHistory(!showHistory)}
             className="absolute top-6 right-6 p-2 text-slate-400 hover:text-purple-600 transition-colors rounded-full hover:bg-purple-50"
-            title="View Generation History"
+            title={t.ai_lab.history_btn}
           >
             <History size={20} />
           </button>
@@ -428,7 +470,7 @@ const ImageEditor: React.FC = () => {
         {/* History Panel */}
         {showHistory && (
           <div className="absolute top-16 right-6 w-64 bg-white rounded-xl shadow-xl border border-slate-200 p-4 z-10 max-h-96 overflow-y-auto">
-            <h3 className="text-sm font-bold text-slate-700 mb-3">Generation History</h3>
+            <h3 className="text-sm font-bold text-slate-700 mb-3">{t.ai_lab.history_btn}</h3>
             <div className="space-y-3">
               {history.map((item) => (
                 <div 
@@ -456,8 +498,8 @@ const ImageEditor: React.FC = () => {
             <Wand2 className="w-6 h-6 text-purple-600" />
           </div>
           <div>
-            <h2 className="text-xl font-bold text-slate-900">Visual Reconstruction</h2>
-            <p className="text-slate-500 text-sm">Use Gemini AI to visualize the simulated scenario on real site photos</p>
+            <h2 className="text-xl font-bold text-slate-900">{t.ai_lab.visual_title}</h2>
+            <p className="text-slate-500 text-sm">{t.ai_lab.visual_desc}</p>
           </div>
         </div>
 
@@ -479,8 +521,8 @@ const ImageEditor: React.FC = () => {
               ) : (
                 <div className="text-center p-6">
                   <Upload className="w-10 h-10 text-slate-400 mx-auto mb-2" />
-                  <p className="text-sm font-medium text-slate-600">Upload Site Photo</p>
-                  <p className="text-xs text-slate-400 mt-1">Supports JPG, PNG</p>
+                  <p className="text-sm font-medium text-slate-600">{t.ai_lab.upload_title}</p>
+                  <p className="text-xs text-slate-400 mt-1">{t.ai_lab.upload_desc}</p>
                 </div>
               )}
               <input 
@@ -493,11 +535,11 @@ const ImageEditor: React.FC = () => {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-700">AI Prompt (Auto-generated from simulation)</label>
+              <label className="text-sm font-medium text-slate-700">{t.ai_lab.prompt_label}</label>
               <textarea
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
-                placeholder="Configure simulation above and click 'Apply to AI Vision'..."
+                placeholder={t.ai_lab.prompt_placeholder}
                 className="w-full p-3 rounded-lg border border-slate-200 focus:ring-2 focus:ring-purple-500 focus:border-transparent min-h-[100px] resize-none text-sm"
               />
             </div>
@@ -514,12 +556,12 @@ const ImageEditor: React.FC = () => {
               {loading ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  Generating...
+                  {t.ai_lab.gen_loading}
                 </>
               ) : (
                 <>
                   <Wand2 className="w-5 h-5" />
-                  Generate Visualization
+                  {t.ai_lab.gen_btn}
                 </>
               )}
             </button>
@@ -534,7 +576,7 @@ const ImageEditor: React.FC = () => {
             <div className="flex justify-between items-center mb-3">
               <h3 className="text-sm font-medium text-slate-700 flex items-center gap-2">
                 <ImageIcon className="w-4 h-4" />
-                AI Result
+                {t.ai_lab.result_title}
               </h3>
               {resultImage && (
                 <button 
@@ -548,18 +590,67 @@ const ImageEditor: React.FC = () => {
             </div>
             
             <div className="flex-1 flex items-center justify-center bg-white rounded-lg border border-slate-100 overflow-hidden relative">
-              {resultImage ? (
+              {resultImage && selectedImage ? (
+                // Before/After Comparison Slider
+                <div 
+                  ref={imageContainerRef}
+                  className="relative w-full h-full select-none"
+                  style={{ cursor: 'ew-resize' }}
+                  onMouseDown={handleMouseDown}
+                  onTouchStart={handleMouseDown}
+                >
+                  {/* Result Image (Bottom layer, full visibility but covered by clip path) */}
+                  <img 
+                    src={`data:image/png;base64,${resultImage}`} 
+                    alt="AI Restoration" 
+                    className="absolute top-0 left-0 w-full h-full object-contain pointer-events-none"
+                  />
+                  
+                  {/* Original Image (Top layer, clipped) */}
+                  <div 
+                    className="absolute top-0 left-0 w-full h-full overflow-hidden"
+                    style={{ clipPath: `inset(0 ${100 - sliderPosition}% 0 0)` }}
+                  >
+                    <img 
+                      src={`data:${mimeType};base64,${selectedImage}`} 
+                      alt="Original" 
+                      className="absolute top-0 left-0 w-full h-full object-contain pointer-events-none"
+                    />
+                  </div>
+
+                  {/* Slider Handle Line */}
+                  <div 
+                    className="absolute top-0 bottom-0 w-1 bg-white cursor-ew-resize shadow-[0_0_10px_rgba(0,0,0,0.5)]"
+                    style={{ left: `${sliderPosition}%` }}
+                  >
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-lg border border-slate-200">
+                      <MoveHorizontal size={16} className="text-slate-600" />
+                    </div>
+                  </div>
+
+                  {/* Labels */}
+                  <div className={`absolute top-4 left-4 bg-black/50 text-white px-2 py-1 rounded text-xs font-bold transition-opacity ${isResizing ? 'opacity-0' : 'opacity-100'}`}>
+                    Original
+                  </div>
+                  <div className={`absolute top-4 right-4 bg-purple-600/80 text-white px-2 py-1 rounded text-xs font-bold transition-opacity ${isResizing ? 'opacity-0' : 'opacity-100'}`}>
+                    AI Restoration
+                  </div>
+
+                </div>
+              ) : resultImage ? (
+                // Just Result (Fallback if no selectedImage for some reason)
                 <img 
                   src={`data:image/png;base64,${resultImage}`} 
                   alt="AI Generated" 
                   className="w-full h-full object-contain"
                 />
               ) : (
+                // Empty State
                 <div className="text-center text-slate-400 p-8">
                   <div className="w-16 h-16 bg-slate-100 rounded-full mx-auto mb-4 flex items-center justify-center">
                     <Wand2 className="w-8 h-8 text-slate-300" />
                   </div>
-                  <p>The AI-enhanced restoration simulation will appear here</p>
+                  <p>{t.ai_lab.result_empty}</p>
                 </div>
               )}
             </div>
